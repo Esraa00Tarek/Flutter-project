@@ -1,7 +1,11 @@
-import '../widgets/todo_item.dart';
+// lib/screens/home.dart
 import 'package:flutter/material.dart';
+import 'package:todo_app/modal/todo.dart';
+import '../widgets/todo_item.dart';
 import '../constants/colors.dart';
 import '../modal/todo.dart';
+import '../services/api_provider.dart';
+import './Login.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -11,17 +15,33 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
-  final TodoList = ToDo.todoList();
   List<ToDo> _foundTodo = [];
-  bool _isGridView = false; 
+  bool _isGridView = false;
+  bool _isLoading = true;
+  final _todoController = TextEditingController();
+  final ApiProvider _apiProvider = ApiProvider();
 
   @override
   void initState() {
-    _foundTodo = TodoList;
     super.initState();
+    _fetchTasks();
   }
 
-  final _todoController = TextEditingController();
+  Future<void> _fetchTasks() async {
+    setState(() => _isLoading = true);
+    try {
+      final tasks = await _apiProvider.getTasks();
+      setState(() {
+        _foundTodo = tasks;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error fetching tasks: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -42,7 +62,11 @@ class _HomeState extends State<Home> {
               children: [
                 searchBox(),
                 Expanded(
-                  child: _isGridView ? _buildGridView() : _buildListView(),
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _isGridView
+                      ? _buildGridView()
+                      : _buildListView(),
                 ),
               ],
             ),
@@ -94,13 +118,6 @@ class _HomeState extends State<Home> {
                     ],
                   ),
                   child: ElevatedButton(
-                    child: const Text(
-                      "+",
-                      style: TextStyle(
-                        fontSize: 40,
-                        color: Colors.white,
-                      ),
-                    ),
                     onPressed: () {
                       _addTodoItem(_todoController.text);
                     },
@@ -111,6 +128,13 @@ class _HomeState extends State<Home> {
                       padding: const EdgeInsets.all(0),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    child: const Text(
+                      "+",
+                      style: TextStyle(
+                        fontSize: 40,
+                        color: Colors.white,
                       ),
                     ),
                   ),
@@ -140,7 +164,7 @@ class _HomeState extends State<Home> {
           TodoItem(
             todo: todo,
             onToDoChanged: _handleTodoChange,
-            onDeleteItem: _deleteTodoItem,
+            onDeleteItem: (id) => _deleteTodoItem(id.toString()),
           ),
       ],
     );
@@ -167,7 +191,7 @@ class _HomeState extends State<Home> {
               crossAxisCount: 2,
               crossAxisSpacing: 15,
               mainAxisSpacing: 15,
-              childAspectRatio: 1.2, 
+              childAspectRatio: 1.2,
             ),
             itemCount: _foundTodo.length,
             itemBuilder: (context, index) {
@@ -203,13 +227,13 @@ class _HomeState extends State<Home> {
           Row(
             children: [
               Icon(
-                todo.isDone ? Icons.check_box : Icons.check_box_outline_blank,
+                todo.isDone! ? Icons.check_box : Icons.check_box_outline_blank,
                 color: tdBlue,
                 size: 24,
               ),
               const Spacer(),
               GestureDetector(
-                onTap: () => _deleteTodoItem(todo.id!),
+                onTap: () => _deleteTodoItem(todo.id! as String),
                 child: Container(
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
@@ -230,12 +254,12 @@ class _HomeState extends State<Home> {
             child: GestureDetector(
               onTap: () => _handleTodoChange(todo),
               child: Text(
-                todo.todoText!,
+                todo.title!,
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w500,
                   color: tdBlack,
-                  decoration: todo.isDone ? TextDecoration.lineThrough : null,
+                  decoration: todo.isDone! ? TextDecoration.lineThrough : null,
                   decorationColor: tdGrey,
                   decorationThickness: 2,
                 ),
@@ -248,7 +272,7 @@ class _HomeState extends State<Home> {
           Container(
             height: 4,
             decoration: BoxDecoration(
-              color: todo.isDone ? Colors.green : tdBlue,
+              color: Colors.green,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -257,43 +281,114 @@ class _HomeState extends State<Home> {
     );
   }
 
-  void _handleTodoChange(ToDo todo) {
-    setState(() {
-      todo.isDone = !todo.isDone;
-    });
+  void _handleTodoChange(ToDo todo) async {
+    setState(() => _isLoading = true);
+    try {
+      final success = await _apiProvider.updateTask(
+        todo.id.toString(),
+        !todo.isDone!,
+        todo.title!,
+      );
+      if (success) {
+        setState(() {
+          todo.isDone = !todo.isDone!;
+        });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to update task')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
-  void _deleteTodoItem(String id) {
-    setState(() {
-      TodoList.removeWhere((item) => item.id == id);
-    });
-    _runFilter(''); // Refresh the filtered list
+  void _deleteTodoItem(String id) async {
+    setState(() => _isLoading = true);
+    try {
+      final success = await _apiProvider.deleteTask(id);
+      if (success) {
+        setState(() {
+          _foundTodo.removeWhere((item) => item.id.toString() == id);
+        });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to delete task')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
-  void _addTodoItem(String todo) {
-    if (todo.trim().isNotEmpty) {
-      setState(() {
-        TodoList.add(ToDo(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          todoText: todo.trim(),
-        ));
-      });
-      _todoController.clear();
-      _runFilter(''); // Refresh the filtered list
+  void _addTodoItem(String todo) async {
+    final trimmed = todo.trim();
+    if (trimmed.isEmpty) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final success = await _apiProvider.createTask(trimmed);
+      if (success) {
+        _todoController.clear();
+        await _fetchTasks();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to add task')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error adding task: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
   void _runFilter(String enteredKeyword) {
-    List<ToDo> results = [];
-    if (enteredKeyword.isEmpty) {
-      results = TodoList;
-    } else {
-      results = TodoList.where((todo) =>
-          todo.todoText!.toLowerCase().contains(enteredKeyword.toLowerCase())).toList();
-    }
     setState(() {
-      _foundTodo = results;
+      if (enteredKeyword.isEmpty) {
+        _fetchTasks(); // Refresh from API
+      } else {
+        _foundTodo = _foundTodo
+            .where((todo) =>
+            todo.title!.toLowerCase().contains(enteredKeyword.toLowerCase()))
+            .toList();
+      }
     });
+  }
+
+  void _logout() async {
+    setState(() => _isLoading = true);
+    try {
+      final success = await _apiProvider.logout();
+      if (success) {
+        if (!mounted) return;
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const Login()),
+              (route) => false,
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Logout failed')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   Widget searchBox() {
@@ -357,6 +452,12 @@ class _HomeState extends State<Home> {
                   },
                   tooltip: _isGridView ? 'Switch to List View' : 'Switch to Grid View',
                 ),
+              ),
+              const SizedBox(width: 10),
+              IconButton(
+                icon: const Icon(Icons.logout, color: tdBlack, size: 28),
+                onPressed: _logout,
+                tooltip: 'Logout',
               ),
               const SizedBox(width: 10),
               Container(

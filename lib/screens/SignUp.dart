@@ -1,8 +1,8 @@
-// ignore: file_names
 import 'package:flutter/material.dart';
 import '../constants/colors.dart';
-import 'home.dart';
-import 'Login.dart'; 
+import './home.dart';
+import './Login.dart';
+import '../services/api_provider.dart';
 
 class SignUp extends StatefulWidget {
   const SignUp({super.key});
@@ -15,14 +15,15 @@ class _SignUpState extends State<SignUp> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _mobileController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  bool _isLoading = false;
+
+  final ApiProvider _apiProvider = ApiProvider();
 
   @override
   void dispose() {
     _emailController.dispose();
     _nameController.dispose();
-    _mobileController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -92,20 +93,7 @@ class _SignUpState extends State<SignUp> {
                   return null;
                 },
               ),
-              const SizedBox(height: 20),
-              _buildInputField(
-                controller: _mobileController,
-                hint: 'Mobile',
-                icon: Icons.phone,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Mobile number is required';
-                  } else if (!RegExp(r'^\d{10,}$').hasMatch(value)) {
-                    return 'Enter a valid mobile number (at least 10 digits)';
-                  }
-                  return null;
-                },
-              ),
+              
               const SizedBox(height: 20),
               _buildInputField(
                 controller: _passwordController,
@@ -122,52 +110,75 @@ class _SignUpState extends State<SignUp> {
               const SizedBox(height: 30),
               Align(
                 alignment: Alignment.center,
-                child: Container(
-                  height: 60,
-                  width: 100,
-                  decoration: BoxDecoration(
-                    color: tdBlue,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.grey,
-                        blurRadius: 10,
-                        offset: Offset(0.0, 0.0),
-                        spreadRadius: 0.0,
+                child: _isLoading
+                    ? const CircularProgressIndicator()
+                    : Container(
+                        height: 60,
+                        width: 100,
+                        decoration: BoxDecoration(
+                          color: tdBlue,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Colors.grey,
+                              blurRadius: 10,
+                              offset: Offset(0.0, 0.0),
+                              spreadRadius: 0.0,
+                            ),
+                          ],
+                        ),
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            if (_formKey.currentState!.validate()) {
+                              setState(() => _isLoading = true);
+                              try {
+                                final success = await _apiProvider.signUp(
+                                  _emailController.text,
+                                  _nameController.text,
+                                  _passwordController.text,
+                                );
+                                if (success) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Sign Up Successful!')),
+                                  );
+                                  Navigator.pushAndRemoveUntil(
+                                    context,
+                                    MaterialPageRoute(builder: (context) => const Login()),
+                                    (route) => false,
+                                  );
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Sign Up failed')),
+                                  );
+                                }
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('$e')),
+                                );
+                              } finally {
+                                setState(() => _isLoading = false);
+                              }
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: tdBlue,
+                            minimumSize: const Size(100, 60),
+                            elevation: 0,
+                            padding: EdgeInsets.zero,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                          child: const Text(
+                            'Submit',
+                            style: TextStyle(
+                              fontSize: 20,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
-                  child: ElevatedButton(
-                    onPressed: () {
-                      if (_formKey.currentState!.validate()) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Form Submitted Successfully!')),
-                        );
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(builder: (context) => const Home()),
-                        );
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: tdBlue,
-                      minimumSize: const Size(100, 60),
-                      elevation: 0,
-                      padding: EdgeInsets.zero,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                    child: const Text(
-                      'Submit',
-                      style: TextStyle(
-                        fontSize: 20,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
               ),
               const SizedBox(height: 20),
               Row(

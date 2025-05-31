@@ -1,8 +1,8 @@
-// ignore: file_names
 import 'package:flutter/material.dart';
-import '../constants/colors.dart'; 
+import '../constants/colors.dart';
 import './SignUp.dart';
-import 'home.dart';
+import './home.dart';
+import '../services/api_provider.dart';
 
 class Login extends StatefulWidget {
   const Login({super.key});
@@ -17,6 +17,16 @@ class _LoginState extends State<Login> {
   final _passwordController = TextEditingController();
   String? _emailError;
   String? _passwordError;
+  bool _isLoading = false;
+
+  final ApiProvider _apiProvider = ApiProvider();
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -82,7 +92,9 @@ class _LoginState extends State<Login> {
               const SizedBox(height: 30),
               Align(
                 alignment: Alignment.center,
-                child: Container(
+                child: _isLoading
+                    ? const CircularProgressIndicator()
+                    : Container(
                   height: 60,
                   width: 100,
                   decoration: BoxDecoration(
@@ -98,12 +110,36 @@ class _LoginState extends State<Login> {
                     ],
                   ),
                   child: ElevatedButton(
-                    onPressed: () {
+                    onPressed: () async {
                       if (_formKey.currentState!.validate()) {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(builder: (context) => const Home()),
-                        );
+                        setState(() => _isLoading = true);
+                        try {
+                          final token = await _apiProvider.login(
+                            _emailController.text.trim(),
+                            _passwordController.text,
+                          );
+                          if (token != null) {
+                            Navigator.pushAndRemoveUntil(
+                              context,
+                              MaterialPageRoute(builder: (context) => const Home()),
+                                  (route) => false,
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Invalid credentials'),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Login failed: $e'),
+                            ),
+                          );
+                        } finally {
+                          setState(() => _isLoading = false);
+                        }
                       }
                     },
                     style: ElevatedButton.styleFrom(
